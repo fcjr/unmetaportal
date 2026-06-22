@@ -77,6 +77,18 @@ Use your own launcher APK instead of downloading Lawnchair:
 ./unmetaportal.sh --apk /path/to/launcher.apk
 ```
 
+Start a single-app kiosk session:
+
+```sh
+./tools/portal-kiosk-enable.sh --package com.example.app
+```
+
+Return to Lawnchair launcher mode:
+
+```sh
+./tools/portal-kiosk-disable.sh
+```
+
 ## What The Conversion Does
 
 1. Checks that ADB is connected and reports the device model/API level.
@@ -164,6 +176,55 @@ adb shell dumpsys account | sed -n '/Accounts:/,/Active Sessions:/p'
 
 If `Accounts: 0` is still reported after reboot, the active OS-level account
 records did not regenerate.
+
+## Kiosk Mode
+
+The kiosk scripts provide a reversible single-app mode on top of the converted
+Portal state.
+
+Enable kiosk mode for an app with a normal launcher activity:
+
+```sh
+./tools/portal-kiosk-enable.sh --package com.example.app
+```
+
+Enable kiosk mode with an explicit activity component:
+
+```sh
+./tools/portal-kiosk-enable.sh --component com.example.app/.MainActivity
+```
+
+What this does:
+
+1. Saves the target package/component to `/data/local/tmp/unmetaportal-kiosk.state`.
+2. Enables immersive UI with `settings put global policy_control immersive.full=*`.
+3. Starts the target app as a fresh foreground task.
+4. Locks that task with `am task lock <taskId>`.
+
+Disable kiosk mode and return to Lawnchair:
+
+```sh
+./tools/portal-kiosk-disable.sh
+```
+
+Disable kiosk mode and force-stop the kiosk target too:
+
+```sh
+./tools/portal-kiosk-disable.sh --force-stop-target
+```
+
+For a kiosk launcher APK that is HOME-capable, make it the HOME activity while
+enabling kiosk mode:
+
+```sh
+./tools/portal-kiosk-enable.sh --package com.example.kiosk --set-home
+```
+
+`--set-home` is intentionally strict. Android will reject ordinary apps that do
+not declare a HOME activity. For those apps, the script can still start and lock
+the foreground task, but the setting will not survive a reboot as the boot/home
+target. Use a purpose-built kiosk launcher APK if you need the app to load
+automatically after every boot.
 
 ## Revert
 
