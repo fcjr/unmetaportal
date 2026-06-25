@@ -5,8 +5,9 @@
 # screen and account-facing apps disabled, and the logged-in account's app
 # data wiped. No root required — everything goes through ADB.
 #
-# Validated against: model "Portal", Android 9 (API 28), arm64-v8a,
-# fingerprint Facebook/aloha_prod/aloha:9/...  (bootloader locked, no root).
+# Validated against the "aloha" hardware family: model "Portal" and "Portal+",
+# Android 9 (API 28), arm64-v8a, fingerprint Facebook/aloha_prod/aloha:9/...
+# (bootloader locked, no root). Tested builds include 1.44.4 (Oct 2025).
 #
 # Usage:
 #   ./unmetaportal.sh            run the conversion (prompts before destructive steps)
@@ -147,13 +148,18 @@ preflight() {
     die "no authorized device. Connect the Portal over USB-C and accept the ADB prompt on its screen."
   fi
 
-  local model sdk
+  local model sdk hw
   model="$(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
   sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
-  log "Device: model='${model}' sdk=${sdk}"
+  hw="$(adb shell getprop ro.boot.hardware 2>/dev/null | tr -d '\r')"
+  log "Device: model='${model}' hw='${hw}' sdk=${sdk}"
 
-  if [[ "$model" != "Portal" ]]; then
-    warn "Device model is '${model}', not 'Portal'. This script is only validated on Portal Gen 2."
+  # The real invariant is the "aloha" hardware family, not the marketing model
+  # string. Portal and Portal+ both report hw=aloha and share the same package
+  # set, so accept either; warn only when neither the model nor the hardware
+  # matches what this script was validated against.
+  if [[ "$model" != "Portal" && "$model" != "Portal+" && "$hw" != "aloha" ]]; then
+    warn "Device model='${model}' hw='${hw}' — only validated on the aloha family (Portal / Portal+)."
     confirm "Continue anyway?"
   fi
   if [[ "${sdk:-0}" -lt 28 ]]; then

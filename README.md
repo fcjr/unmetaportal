@@ -9,12 +9,19 @@ cleanup uses the community Portal CVE-2024-31317 path to ask Android's
 AccountManager to remove Portal Facebook accounts as the Facebook authenticator
 UID.
 
-## Tested Device
+## Tested Devices
 
-- Model: `Portal`
+Both share the `aloha` hardware family, the same Android 9 image, and the same
+Portal/Facebook package set, so the conversion is identical across them. The
+preflight check gates on the `aloha` hardware codename, not the model string,
+so both are accepted without prompting.
+
+- Model: `Portal` and `Portal+`
+- Hardware codename: `aloha`
 - Android: 9 / API 28
 - CPU ABI: `arm64-v8a`
 - Build family: `Facebook/aloha_prod/aloha:9/...`
+- Tested build: `1.44.4` (Oct 2025) on Portal+
 - Launcher used: Lawnchair 12.1.0 Alpha 4
 
 Lawnchair version matters on this device:
