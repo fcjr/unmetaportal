@@ -1,0 +1,24 @@
+unmetaportal
+Copyright 2026 Frank Chiarulli Jr.
+
+This product includes software developed by the unmetaportal contributors.
+
+unmetaportal is an independent, community-maintained project. It is not
+affiliated with, authorized by, sponsored by, or endorsed by Meta Platforms,
+Inc.
+
+"Meta", "Facebook", "Portal", "Portal+", "Portal TV", "Messenger", "WhatsApp",
+and related names and logos are trademarks of Meta Platforms, Inc. and/or its
+affiliates. These names are used in this project solely in a nominative,
+descriptive sense — to identify the specific hardware and software this project
+interoperates with. No claim of ownership or affiliation is made or implied.
+
+This project is intended for owners to repurpose hardware they own. It does not
+modify firmware, unlock the bootloader, or circumvent any technical protection
+measure; it uses standard Android Debug Bridge (ADB) commands and a publicly
+documented CVE to operate on device state that the owner is entitled to change.
+
+The optional account-cleanup path uses CVE-2024-31317, an Android Zygote
+command-injection vulnerability discovered and disclosed by Tom Hebb of Meta
+Red Team X:
+  https://rtx.meta.security/exploitation/2024/06/03/Android-Zygote-injection.html

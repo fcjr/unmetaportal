@@ -4,6 +4,12 @@ Turn a Meta/Facebook Portal on Android 9 into a plain Android device with a
 normal launcher and no active Facebook account UI. Supports both the `aloha`
 touch panels (Portal / Portal+) and the `ripley` Android TV box (Portal TV).
 
+> **Independent project.** unmetaportal is a community tool for repurposing a
+> Portal you own. It is not affiliated with, authorized by, or endorsed by Meta
+> Platforms, Inc. "Meta", "Facebook", and "Portal" are trademarks of Meta
+> Platforms, Inc., used here only to identify the hardware this project works
+> with. See [Disclaimer & Trademarks](#disclaimer--trademarks).
+
 This is not a firmware flash and it does not unlock the bootloader. The main
 conversion uses normal ADB package/app-state commands. Optional OS-level account
 cleanup uses the community Portal CVE-2024-31317 path to ask Android's
@@ -291,3 +297,36 @@ adb uninstall app.lawnchair
   sanitization. It confirms Android has no active registered Portal Facebook
   accounts.
 - This repository is intended for repurposing your own retired device.
+
+## Credits
+
+The optional account-cleanup path relies on **CVE-2024-31317**, an Android Zygote
+command-injection vulnerability discovered and disclosed by **Tom Hebb** of
+**Meta Red Team X**. Their writeup,
+[*Becoming any Android app via Zygote command injection*](https://rtx.meta.security/exploitation/2024/06/03/Android-Zygote-injection.html),
+documents the technique this project uses to run AccountManager calls as the
+Facebook authenticator UID. This project is an independent application of that
+publicly documented research; see [Disclaimer & Trademarks](#disclaimer--trademarks).
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See the [NOTICE](NOTICE)
+file for attribution and trademark information.
+
+## Disclaimer & Trademarks
+
+unmetaportal is an independent, community-maintained project. It is **not**
+affiliated with, authorized by, sponsored by, or endorsed by Meta Platforms, Inc.
+
+"Meta", "Facebook", "Portal", "Portal+", "Portal TV", "Messenger", and "WhatsApp"
+are trademarks of Meta Platforms, Inc. and/or its affiliates. They are used in
+this project only in a nominative, descriptive sense — to identify the specific
+hardware and software this project interoperates with. No ownership, affiliation,
+or endorsement is claimed or implied.
+
+This project does not flash firmware, unlock the bootloader, or circumvent any
+technical protection measure. It operates entirely through standard Android Debug
+Bridge (ADB) commands and a publicly documented CVE, acting on device state that
+the device's owner is entitled to change. It is provided for owners to repurpose
+hardware they own, "AS IS" and without warranty of any kind. You are responsible
+for complying with the laws and agreements that apply to your device.

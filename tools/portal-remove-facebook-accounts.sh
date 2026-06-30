@@ -1,4 +1,7 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Frank Chiarulli Jr.
+#
 # Remove Facebook Portal account records via AccountManager as the Facebook
 # authenticator UID. This avoids direct SQLite edits.
 set -eu

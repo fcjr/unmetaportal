@@ -1,0 +1,8 @@
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Downloaded launcher APKs (fetched at runtime, checksum-verified)
+*.apk
+
+# macOS
+.DS_Store

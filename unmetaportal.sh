@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Frank Chiarulli Jr.
+#
 # unmetaportal — turn a Facebook/Meta Portal (Gen 2, Android 9) into a plain
 # Android device: a normal third-party launcher as home, the Facebook home
 # screen and account-facing apps disabled, and the logged-in account's app
@@ -207,7 +210,7 @@ while [[ $# -gt 0 ]]; do
     --remove-accounts) MODE="remove-accounts" ;;
     --with-account-cleanup) RUN_ACCOUNT_CLEANUP=1 ;;
     --apk)     shift; USER_APK="${1:?--apk needs a path}" ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '6,26p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
   shift

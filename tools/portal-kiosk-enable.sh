@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Frank Chiarulli Jr.
+#
 # Put the Portal into a reversible single-app mode.
 #
 # Usage:
@@ -29,7 +32,7 @@ warn() { printf '\033[1;33m  ! \033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,14p' "$0"
+  sed -n '6,17p' "$0"
 }
 
 adbsh() {
