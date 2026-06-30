@@ -1,7 +1,8 @@
 # unmetaportal
 
-Turn a Meta/Facebook Portal Gen 2 on Android 9 into a plain Android device with
-a normal launcher and no active Facebook account UI.
+Turn a Meta/Facebook Portal on Android 9 into a plain Android device with a
+normal launcher and no active Facebook account UI. Supports both the `aloha`
+touch panels (Portal / Portal+) and the `ripley` Android TV box (Portal TV).
 
 This is not a firmware flash and it does not unlock the bootloader. The main
 conversion uses normal ADB package/app-state commands. Optional OS-level account
@@ -11,17 +12,19 @@ UID.
 
 ## Tested Devices
 
-Both share the `aloha` hardware family, the same Android 9 image, and the same
-Portal/Facebook package set, so the conversion is identical across them. The
-preflight check gates on the `aloha` hardware codename, not the model string,
-so both are accepted without prompting.
+Two Portal hardware families are supported. Both run Android 9 and the same
+"aloha" software stack, but they differ in form factor, home surface, and which
+launcher makes sense. Preflight detects the hardware codename and picks the
+right package set and launcher automatically; no flag needed.
+
+### aloha — Portal / Portal+ (touch panels)
 
 - Model: `Portal` and `Portal+`
 - Hardware codename: `aloha`
-- Android: 9 / API 28
-- CPU ABI: `arm64-v8a`
+- Android: 9 / API 28, `arm64-v8a`
 - Build family: `Facebook/aloha_prod/aloha:9/...`
 - Tested build: `1.44.4` (Oct 2025) on Portal+
+- Home surface: `com.facebook.alohaapps.launcher` (+ AbilityCenter)
 - Launcher used: Lawnchair 12.1.0 Alpha 4
 
 Lawnchair version matters on this device:
@@ -29,6 +32,29 @@ Lawnchair version matters on this device:
 - Lawnchair 12.1 runs and supports landscape.
 - Lawnchair 14/15 install but crash-loop on Android 9.
 - Lawnchair 1.2 runs but is portrait-only on the Portal panel.
+
+### ripley — Portal TV (Android TV box)
+
+- Model: `PortalTV`
+- Hardware codename: `ripley`
+- Android: 9 / API 28, `arm64-v8a`
+- Build family: `Facebook/ripley_prod/ripley:9/...`
+- Home surface: `com.facebook.aloha.system.ripleyhome` (TvHomeActivity, +
+  AbilityCenter)
+- Launcher used: LtvLauncher (arm64-v8a)
+
+Portal TV is a leanback (Android TV) device driven by a remote, not a
+touchscreen, so it gets a d-pad-native launcher instead of Lawnchair:
+
+- LtvLauncher is an open-source leanback launcher (`LEANBACK_LAUNCHER` + HOME),
+  navigable with the Portal TV remote. minSdk 21, runs on Android 9. It is an
+  actively maintained fork of FLauncher (which has been dormant since 2023).
+- Lawnchair is a touch launcher with no d-pad focus model and cannot be driven
+  by the remote, so it is not used here.
+
+After the Facebook apps are disabled, the script refreshes the launcher's app
+list (`pm clear` on the launcher package) so the disabled apps stop appearing as
+tiles. The HOME setting lives in PackageManager and survives that refresh.
 
 ## Requirements
 
@@ -98,16 +124,20 @@ Return to Lawnchair launcher mode:
 
 ## What The Conversion Does
 
-1. Checks that ADB is connected and reports the device model/API level.
-2. Downloads Lawnchair 12.1 and verifies its SHA-256 checksum.
-3. Installs Lawnchair and sets it as the Android HOME activity.
-4. Disables both Portal home surfaces:
-   - `com.facebook.alohaapps.launcher`
-   - `com.facebook.alohaservices.abilitymanager`
+1. Checks that ADB is connected, reports the device model/API level, and selects
+   the matching profile (aloha or ripley).
+2. Downloads the profile's launcher (Lawnchair on aloha, LtvLauncher on ripley)
+   and verifies its SHA-256 checksum.
+3. Installs the launcher and sets it as the Android HOME activity.
+4. Disables both Portal home surfaces. The framework launcher differs by family:
+   - aloha: `com.facebook.alohaapps.launcher`
+   - ripley: `com.facebook.aloha.system.ripleyhome`
+   - both: `com.facebook.alohaservices.abilitymanager` (AbilityCenter)
 5. Clears Facebook session/app data with `pm clear`.
 6. Disables account-facing Facebook apps such as Messenger, WhatsApp, feed,
    contacts, and presence.
-7. Verifies the launcher and AccountManager state.
+7. Refreshes the launcher's app list so the disabled apps stop showing as tiles.
+8. Verifies the launcher and AccountManager state.
 
 Both Portal home surfaces matter. If only one is disabled, the framework can
 fall back to AbilityCenter instead of the third-party launcher.
