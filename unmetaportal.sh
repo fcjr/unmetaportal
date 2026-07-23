@@ -24,6 +24,9 @@
 #   ./unmetaportal.sh --with-account-cleanup
 #                                convert, then remove OS-level accounts too
 #   ./unmetaportal.sh --apk PATH use a local launcher APK instead of downloading
+#   ./unmetaportal.sh -s SERIAL  target a specific device (also honors
+#                                ANDROID_SERIAL); required when more than one
+#                                device is attached, e.g. USB + wireless ADB
 #
 # Read the CAVEATS section near the bottom before relying on this for privacy.
 
@@ -179,6 +182,8 @@ DRY_RUN=0
 ASSUME_YES=0
 MODE="convert"
 RUN_ACCOUNT_CLEANUP=0
+SERIAL=""       # target device serial (from -s/--serial or ANDROID_SERIAL)
+ADB_ARGS=()     # populated by resolve_device as (-s "$SERIAL")
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
@@ -191,7 +196,7 @@ adbsh() {
     printf '   [dry-run] adb %s\n' "$*" >&2
     return 0
   fi
-  adb "$@"
+  adb "${ADB_ARGS[@]}" "$@"
 }
 
 adbq() {
@@ -199,7 +204,7 @@ adbq() {
     printf '   [dry-run] adb %s\n' "$*" >&2
     return 0
   fi
-  adb "$@" >/dev/null 2>&1
+  adb "${ADB_ARGS[@]}" "$@" >/dev/null 2>&1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -209,6 +214,7 @@ while [[ $# -gt 0 ]]; do
     --revert)  MODE="revert" ;;
     --remove-accounts) MODE="remove-accounts" ;;
     --with-account-cleanup) RUN_ACCOUNT_CLEANUP=1 ;;
+    --serial|-s) shift; SERIAL="${1:?--serial needs a device serial}" ;;
     --apk)     shift; USER_APK="${1:?--apk needs a path}" ;;
     -h|--help) sed -n '6,26p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -223,17 +229,12 @@ done
 preflight() {
   command -v adb >/dev/null 2>&1 || die "adb not found in PATH (install Android platform-tools)."
 
-  local state
-  state="$(adb get-state 2>/dev/null || true)"
-  if [[ "$state" != "device" ]]; then
-    adb devices -l || true
-    die "no authorized device. Connect the Portal over USB-C and accept the ADB prompt on its screen."
-  fi
+  resolve_device
 
   local model sdk hw
-  model="$(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
-  sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
-  hw="$(adb shell getprop ro.boot.hardware 2>/dev/null | tr -d '\r')"
+  model="$(adb "${ADB_ARGS[@]}" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
+  sdk="$(adb "${ADB_ARGS[@]}" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+  hw="$(adb "${ADB_ARGS[@]}" shell getprop ro.boot.hardware 2>/dev/null | tr -d '\r')"
   log "Device: model='${model}' hw='${hw}' sdk=${sdk}"
 
   select_profile "$model" "$hw"
@@ -241,6 +242,40 @@ preflight() {
   if [[ "${sdk:-0}" -lt 28 ]]; then
     warn "SDK ${sdk} < 28. Untested; launcher choice may differ."
   fi
+}
+
+# Resolve exactly one target device and pin every later adb call to it via -s.
+# adb's bare commands (get-state, shell, ...) error out when more than one device
+# is attached — common on a Portal that's reachable over both USB and TCP at once.
+# Pick the target from -s/--serial or ANDROID_SERIAL when given; otherwise require
+# a single authorized device, and list choices when the selection is ambiguous.
+resolve_device() {
+  local devices requested count
+  devices="$(adb devices | awk 'NR>1 && $2=="device" {print $1}')"
+  requested="${SERIAL:-${ANDROID_SERIAL:-}}"
+
+  if [[ -z "$devices" ]]; then
+    adb devices -l || true
+    die "no authorized device. Connect the Portal over USB-C and accept the ADB prompt on its screen."
+  fi
+
+  if [[ -n "$requested" ]]; then
+    if ! grep -qx "$requested" <<<"$devices"; then
+      adb devices -l || true
+      die "device '$requested' is not connected/authorized. Pick one of the serials listed above."
+    fi
+    SERIAL="$requested"
+  else
+    count="$(grep -c . <<<"$devices")"
+    if [[ "$count" -gt 1 ]]; then
+      adb devices -l || true
+      die "multiple devices connected — choose one with -s SERIAL (e.g. -s $(head -1 <<<"$devices")) or set ANDROID_SERIAL."
+    fi
+    SERIAL="$devices"
+  fi
+
+  ADB_ARGS=(-s "$SERIAL")
+  log "Target device: $SERIAL"
 }
 
 # Pick the package/launcher set for the connected hardware. The real invariant
@@ -404,19 +439,19 @@ verify() {
   [[ $DRY_RUN -eq 1 ]] && return 0
   log "Verifying"
   local home
-  home="$(adb shell cmd package resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/null | grep -iE 'packageName=' | head -1 | tr -d '\r')"
+  home="$(adb "${ADB_ARGS[@]}" shell cmd package resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME 2>/dev/null | grep -iE 'packageName=' | head -1 | tr -d '\r')"
   printf '   HOME resolves to:%s\n' "${home#*packageName=}"
   [[ "$home" == *"$LAUNCHER_PKG"* ]] && ok "launcher is the default home" || warn "launcher is NOT resolving as home — check manually."
-  adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
-  adb shell input keyevent KEYCODE_HOME   >/dev/null 2>&1 || true
+  adb "${ADB_ARGS[@]}" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+  adb "${ADB_ARGS[@]}" shell input keyevent KEYCODE_HOME   >/dev/null 2>&1 || true
   local account_count
-  account_count="$(adb shell dumpsys account 2>/dev/null | sed -n 's/^  Accounts: //p' | head -1 | tr -d '\r')"
+  account_count="$(adb "${ADB_ARGS[@]}" shell dumpsys account 2>/dev/null | sed -n 's/^  Accounts: //p' | head -1 | tr -d '\r')"
   printf '   AccountManager active accounts: %s\n' "${account_count:-unknown}"
   if [[ "${account_count:-unknown}" == "0" ]]; then
     ok "no active OS-level accounts registered"
   else
     warn "Active OS-level accounts remain. Run: $0 --remove-accounts"
-    adb shell dumpsys account 2>/dev/null | grep -iE "Account \{" | sed 's/^/     /' || true
+    adb "${ADB_ARGS[@]}" shell dumpsys account 2>/dev/null | grep -iE "Account \{" | sed 's/^/     /' || true
   fi
 }
 
