@@ -20,9 +20,14 @@
 #   ./unmetaportal.sh --dry-run  print every command without changing the device
 #   ./unmetaportal.sh --revert   re-enable Facebook apps and restore the FB home
 #   ./unmetaportal.sh --remove-accounts
-#                                remove OS-level Portal Facebook accounts
+#                                wipe Facebook session/app data, then remove
+#                                OS-level Portal Facebook accounts
 #   ./unmetaportal.sh --with-account-cleanup
-#                                convert, then remove OS-level accounts too
+#                                convert, then wipe session data and remove
+#                                OS-level accounts too
+#                                (without these two, the session data is kept,
+#                                so the Meta debug menu can re-enable ADB
+#                                after a restart)
 #   ./unmetaportal.sh --apk PATH use a local launcher APK instead of downloading
 #   ./unmetaportal.sh -s SERIAL  target a specific device (also honors
 #                                ANDROID_SERIAL); required when more than one
@@ -78,8 +83,9 @@ ALOHA_HOME_SURFACES=(
 )
 ALOHA_FB_HOME_ACTIVITY="com.facebook.alohaapps.launcher/com.facebook.aloha.app.home.touch.HomeActivity"
 # Packages whose app data holds the logged-in session (tokens, cached profile,
-# messages, photos). `pm clear` wipes that data. AccountManager records require
-# the explicit cleanup phase; see remove_account_records and CAVEATS.
+# messages, photos). `pm clear` wipes that data. It runs only in the account
+# cleanup phase (--remove-accounts / --with-account-cleanup), right before the
+# AccountManager removal; see remove_account_records and CAVEATS.
 ALOHA_WIPE_PKGS=(
   com.facebook.alohaservices.alohausers
   com.facebook.alohaapps.personaluser
@@ -398,6 +404,19 @@ disable_apps() {
   done
 }
 
+# The Portal firmware has a package verifier (log tag FacebookAppVerifier) that
+# rejects every on-device install not signed with a Facebook certificate, with
+# INSTALL_FAILED_VERIFICATION_FAILURE. This blocks app stores such as Aurora.
+# ADB installs are not sent to the verifier, which is why `adb install` works.
+# PACKAGE_VERIFIER_ENABLE=0 makes PackageManager skip verification for all
+# on-device installs. --revert sets it back to 1.
+disable_package_verifier() {
+  log "Turning off the Facebook package verifier (allows app store installs)"
+  adbsh shell settings put global package_verifier_enable 0 \
+    && ok "package_verifier_enable=0" \
+    || warn "could not set package_verifier_enable"
+}
+
 refresh_launcher() {
   # The launcher caches its app list on first scan, which happens at install
   # time — before the disable steps above run. Without this it keeps showing
@@ -420,12 +439,18 @@ remove_account_records() {
 
   cat <<EOF
 
-This will remove active OS-level Facebook Portal accounts from Android
-AccountManager. It uses the community Portal CVE-2024-31317 path to run the
-AccountManager removal calls as the Facebook authenticator UID. It does not
-edit AccountManager SQLite files directly.
+This will wipe Facebook session/app data (pm clear) and remove active
+OS-level Facebook Portal accounts from Android AccountManager. It uses the
+community Portal CVE-2024-31317 path to run the AccountManager removal calls as
+the Facebook authenticator UID. It does not edit AccountManager SQLite files
+directly. After a restart, the Meta debug menu can then no longer re-enable
+ADB; only a factory reset restores it.
 EOF
-  confirm "Proceed with AccountManager cleanup?"
+  confirm "Proceed with session wipe and AccountManager cleanup?"
+
+  # The wipe runs only here, not in the default conversion: the Meta debug menu
+  # needs the on-device Facebook session to re-enable ADB after a restart.
+  wipe_account
 
   log "Preparing Facebook authenticator account cleanup"
   adbq shell pm enable com.facebook.alohaservices.alohausers || true
@@ -461,7 +486,9 @@ revert() {
     adbq shell pm enable "$p" && ok "enabled $p" || true
   done
   adbq shell cmd package set-home-activity "$FB_HOME_ACTIVITY" || true
-  ok "FB home restored. (Cleared account data is NOT restored — you'll be asked to log in again.)"
+  adbq shell settings put global package_verifier_enable 1 \
+    && ok "package verifier turned back on" || true
+  ok "FB home restored. (Data wiped by account cleanup is NOT restored.)"
   warn "You may want to: adb uninstall $LAUNCHER_PKG"
 }
 
@@ -487,23 +514,25 @@ cat <<EOF
 This will, on the connected Portal (${PROFILE} profile):
   1. Install ${LAUNCHER_PKG} and make it the home screen
   2. Disable the Facebook home surface(s) + AbilityCenter
-  3. Wipe Facebook session/app data (pm clear)
-  4. Disable Messenger/WhatsApp/feed/contacts/etc.
-  5. Optionally remove OS-level Facebook accounts (--with-account-cleanup)
+  3. Disable Messenger/WhatsApp/feed/contacts/etc.
+  4. Optionally wipe Facebook session/app data and remove OS-level Facebook
+     accounts (--with-account-cleanup). Without it, the session data stays
+     on the device so ADB can be re-enabled after a restart.
+  5. Turn off the Facebook package verifier so app stores can install apps
   6. Refresh the launcher so the disabled apps disappear from its app list
 
-Reversible with: $0 --revert   (account login data is NOT restorable)
+Reversible with: $0 --revert   (wiped account data is NOT restorable)
 EOF
 confirm "Proceed?"
 
 fetch_launcher
 install_launcher
 disable_home_surfaces
-wipe_account
 disable_apps
 if [[ $RUN_ACCOUNT_CLEANUP -eq 1 ]]; then
   remove_account_records
 fi
+disable_package_verifier
 refresh_launcher
 verify
 
@@ -514,12 +543,16 @@ log "Done. The Portal should now boot to ${LAUNCHER_PKG} with no Facebook accoun
 # ----------------------------------------------------------------------------
 # * No root / locked bootloader: everything here is reversible app-level state,
 #   not a firmware change.
-# * Credential removal in this main script is BEST-EFFORT. `pm clear` wipes the
-#   FB apps' on-device session data, but AccountManager records can survive.
-#   Use --remove-accounts or --with-account-cleanup to ask Android's
-#   AccountManager to remove those records as the Facebook authenticator UID.
-#   That cleanup uses the community Portal CVE-2024-31317 path; it does not
-#   directly edit system credential databases. Verify with: adb shell dumpsys account
+# * The default conversion does NOT remove the Facebook session or account. The
+#   Meta debug menu needs them to re-enable ADB after a restart; without them it
+#   asks for the Facebook password and fails with "unknown error (1)", and only a
+#   factory reset restores ADB.
+# * Credential removal (--remove-accounts / --with-account-cleanup) is
+#   BEST-EFFORT. `pm clear` wipes the FB apps' on-device session data, then the
+#   helper asks Android's AccountManager to remove the records as the Facebook
+#   authenticator UID. That cleanup uses the community Portal CVE-2024-31317
+#   path; it does not directly edit system credential databases. Verify with:
+#   adb shell dumpsys account
 # * Only HOME_SURFACES and DISABLE_PKGS are touched. The com.facebook.aloha.system.*
 #   / inputhub / nativelibs / *sdk* packages are deliberately left alone.
 # * Persistence: disabled state and the home setting survive reboot. Verify on
